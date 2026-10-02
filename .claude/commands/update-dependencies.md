@@ -1,10 +1,10 @@
 ---
 description: Bring every pinned upstream dependency up to date, with an audit trail
-argument-hint: "[all|base|opencode|actions] (default: all)"
+argument-hint: "[all|base|grok|actions] (default: all)"
 allowed-tools: Bash(git:*), Bash(gh:*), Bash(npm:*), Bash(curl:*), Bash(jq:*), Bash(docker:*), Bash(helm:*), Bash(make:*), Bash(diff:*), Read, Edit, Grep
 ---
 
-Update the upstream dependencies of `opencode-adapter`. Scope: **$ARGUMENTS** (empty means `all`).
+Update the upstream dependencies of `grok-build-adapter`. Scope: **$ARGUMENTS** (empty means `all`).
 
 This runs for security and compliance: the point is not only that versions move, but that
 the move is **recorded** — old version, new version, digest, and what changed — so the PR
@@ -27,16 +27,18 @@ config ETL all come from here, so this is the security-relevant one.
 conformance suite ships inside the image and CI extracts it from the build, so there is no
 separate suite version to keep in step.
 
-**2. The opencode CLI** — `Dockerfile` `ARG OPENCODE_VERSION`, installed as the npm package
-`opencode-ai`.
+**2. The Grok Build CLI** — `Dockerfile` `ARG GROK_VERSION`, installed as the npm package
+`@xai-official/grok` (published by xAI; the native binary comes in per-platform optional
+dependencies such as `@xai-official/grok-linux-x64`, which move in lockstep with it).
 
 **3. GitHub Actions** — across `.github/workflows/{test,build-image,release-chart}.yaml`:
 `actions/checkout`, `docker/setup-buildx-action`, `docker/login-action`,
 `docker/metadata-action`, `docker/build-push-action`, `azure/setup-helm`.
 
-**4. Vendored upstream files** — `runtime.json` and `emit.mjs` are **verbatim copies** of
-`examples/opencode/` in `coding-runtime`. Nothing fails when they drift from upstream, which
-is exactly why they get missed. Re-copy and diff them whenever the base moves.
+**4. Adapter files** — `runtime.json` and `emit.mjs` are **owned by this repo**:
+`coding-runtime` has no `examples/` entry for Grok Build, so there is nothing to re-copy.
+When the base moves, read its release notes and `docs/authoring-an-adapter.md` for manifest
+or emitter-contract changes and apply them here by hand.
 
 **5. The `/iterate` command** — `.claude/commands/iterate.md` and the three scripts in
 `.claude/commands/iterate/` are **verbatim copies** from `language-operator` (canonical, see
@@ -55,8 +57,8 @@ nothing else moved.
   satisfy — every boot warns about a mismatch that is not real — and which also fails the
   conformance suite's own `reports a version` check, since that asserts semver. Only
   released semver tags.
-- **opencode: take the `latest` dist-tag only.** The package also publishes `next`, `beta`
-  and `dev` tags carrying `0.0.0-*` versions; none of them belong in a release image.
+- **Grok Build: take the `latest` dist-tag only.** The package also publishes an `alpha`
+  tag; pre-release builds do not belong in a release image.
 - **Do not unpin anything to make an update easier.** If a pin is in the way, that is the
   finding — report it rather than loosening it.
 
@@ -77,7 +79,7 @@ Stop and report if any precondition fails; do not continue past a failure.
 the "before" column of the audit trail.
 
 ```bash
-grep -nE 'ARG (BASE|OPENCODE_VERSION)' Dockerfile
+grep -nE 'ARG (BASE|GROK_VERSION)' Dockerfile
 grep -rn 'CODING_RUNTIME_VERSION' Makefile hack/conformance.sh .github/workflows/
 grep -rn 'uses: .*@' .github/workflows/
 ```
@@ -98,10 +100,10 @@ curl -sI -H "Authorization: Bearer $T" \
   | grep -i docker-content-digest
 ```
 
-opencode CLI — the `latest` dist-tag:
+Grok Build CLI — the `latest` dist-tag:
 
 ```bash
-npm view opencode-ai dist-tags --json
+npm view @xai-official/grok dist-tags --json
 ```
 
 If npm fails with `ENOENT … mkdir '/home/node/.npm'`, the cache directory is read-only in
@@ -134,20 +136,10 @@ record why.
 
 - **Base:** update `ARG BASE` with the new tag **and** its digest, then the three
   `CODING_RUNTIME_VERSION` locations to the matching `vX.Y.Z`.
-- **Vendored files:** re-copy from the new base tag and diff before committing, so an
-  upstream change to the emitter or manifest is seen rather than silently kept or silently
-  clobbered:
-
-  ```bash
-  gh api repos/language-operator/coding-runtime/contents/examples/opencode/runtime.json?ref=<vX.Y.Z> --jq .content | base64 -d > /tmp/runtime.json
-  gh api repos/language-operator/coding-runtime/contents/examples/opencode/emit.mjs?ref=<vX.Y.Z>   --jq .content | base64 -d > /tmp/emit.mjs
-  diff -u runtime.json /tmp/runtime.json; diff -u emit.mjs /tmp/emit.mjs
-  ```
-
-  If either differs, take the upstream copy and describe the change in the PR. If
-  `runtime.json` gained a field this adapter should set, that is a real decision — surface
-  it rather than copying past it.
-- **opencode:** update `ARG OPENCODE_VERSION`.
+- **Adapter files:** nothing to re-copy (see group 4). Check the base's release notes for
+  manifest or emitter-contract changes; if `runtime.json` should gain a field, that is a
+  real decision — surface it in the PR rather than applying it silently.
+- **Grok Build:** update `ARG GROK_VERSION`.
 - **Actions:** update the `uses:` pins.
 
 **6. Re-read how the suite is obtained.** CI and `make test` extract
@@ -158,7 +150,7 @@ fetching a tag, which is what let the suite drift from the runtime in the first 
 **7. Verify.**
 
 ```bash
-helm lint chart && helm template opencode chart >/dev/null
+helm lint chart && helm template grok-build chart >/dev/null
 make test        # builds the image and runs the conformance suite; needs Docker
 ```
 
