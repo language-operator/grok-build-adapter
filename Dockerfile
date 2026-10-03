@@ -10,7 +10,7 @@
 # `requires.codingRuntime` range can satisfy, so every boot would warn about a
 # version mismatch that is not real.
 # -----------------------------------------------------------------------------
-ARG BASE=ghcr.io/language-operator/coding-runtime:0.1.4@sha256:2f31ef9b04e72bec3a4bb79db59a82a4aa74f89538cfc118d75e0a852734b0aa
+ARG BASE=ghcr.io/language-operator/coding-runtime:0.1.6@sha256:318a540d9d062689d3ed6c0de34fb353ff076bb16c5770bcf296398c6e5a5412
 ARG GROK_VERSION=1.0.46
 
 FROM ${BASE}
@@ -28,12 +28,14 @@ RUN npm install -g --no-audit --no-fund "@xai-official/grok@${GROK_VERSION}" \
     && npm cache clean --force \
     && rm -rf /root/.grok
 
-# runtime.json       — what this adapter is: config dir, serving surface, tmux launch.
-# emit.mjs           — normalized operator config -> Grok Build config.
-# launch-grok-build  — what tmux runs inside the terminal.
+# runtime.json            — what this adapter is: config dir, serving surface, launchers.
+# emit.mjs                — normalized operator config -> grok config.toml, MCP servers, rules.
+# launch-grok-build       — what tmux runs inside the terminal.
+# launch-grok-build-task  — the one headless run of a task-mode agent.
 COPY runtime.json /etc/coding-runtime/runtime.json
 COPY emit.mjs /opt/adapter/emit.mjs
 COPY --chmod=755 launch-grok-build.sh /usr/local/bin/launch-grok-build
+COPY --chmod=755 launch-grok-build-task.sh /usr/local/bin/launch-grok-build-task
 
 # The operator pins the agent container to uid 1000 with no override, and the
 # base already has a matching passwd entry. Do not create a user here.

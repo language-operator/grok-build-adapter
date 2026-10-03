@@ -3,7 +3,7 @@
   "name": "grok-build",
   "displayName": "grok-build",
   "role": "main",
-  "requires": { "codingRuntime": ">=0.1.2 <1.0.0" },
+  "requires": { "codingRuntime": ">=0.1.6 <1.0.0" },
   "env": { "GROK_HOME": "${STATE_DIR}/grok" },
   "preflight": [{ "path": "${STATE_DIR}/grok", "mode": "700" }],
   "config": { "emitter": { "type": "module", "path": "/opt/adapter/emit.mjs" } },
@@ -14,5 +14,6 @@
     "cwd": "${WORKDIR}",
     "wsPath": "/ws",
     "keepaliveSeconds": 25
-  }
+  },
+  "task": { "exec": ["launch-grok-build-task"] }
 }

@@ -30,12 +30,30 @@ it.
   fetched at runtime. `ARG BASE` pins the base by **tag and digest**, and is the only
   place the base version appears; `ARG GROK_VERSION` pins the CLI.
 - `runtime.json` — the manifest: `GROK_HOME` (Grok Build's config/state dir) on the
-  workspace volume, the serving surface, how tmux launches the TUI.
-- `emit.mjs` — the emitter: normalized config → Grok Build config under `$GROK_HOME`.
-  Currently a placeholder that writes nothing; the real translation is issue #1.
+  workspace volume, the serving surface, how tmux launches the TUI, and `task.exec` for
+  task-mode agents (needs base ≥ 0.1.6).
+- `emit.mjs` — the emitter. Normalized config →
+  - `$GROK_HOME/config.toml`, **owned outright**: every gateway model as a
+    `[model."<id>"]` with `base_url` + `env_key`, the primary as `[models] default` and
+    `session_summary`. A BYOK default model is what lets grok skip xAI's browser sign-in.
+  - `mcpServers` in `$HOME/.claude.json`, **managed per key**: grok reads it through its
+    Claude Code compatibility layer and expands `${NAME}` in headers.
+  - `$GROK_HOME/rules/langop.md` (persona + instructions, a global rule) and
+    `$GROK_HOME/task.md` (instructions, the task-mode prompt).
+
+  Grok-specific traps, each verified against the binary: `$GROK_HOME/managed_config.toml`
+  is **deleted by grok** on a run without a deployment login, and the
+  `GROK_CONFIG_PATH` overlay drops `base_url` and MCP — so neither can carry config.
+  Owned-outright files always report `changed`, so without the managed `.claude.json`
+  write `seed` would never print `unchanged` and the conformance idempotence check fails.
 - Unlike sibling adapters, `runtime.json` and `emit.mjs` are **owned by this repo**:
   `coding-runtime` has no `examples/` entry for Grok Build to copy from.
-- `launch-grok-build.sh` — what tmux runs: `exec grok` in the project directory.
+- `launch-grok-build.sh` — what tmux runs. Passes `--continue` only when this directory
+  has a session with a conversation (`$GROK_HOME/sessions/<urlencoded cwd>/*/updates.jsonl`):
+  `grok --continue` with nothing to resume **exits 1**, which would close the terminal.
+- `launch-grok-build-task.sh` — `task.exec`: `grok -p "$(cat $GROK_HOME/task.md)"
+  --always-approve`. grok exits 0 on success and 1 on a model or gateway error.
+- `test/emit.test.mjs` — `node --test` unit tests for the emitter.
 - `chart/` — the Helm chart registering the cluster-scoped `LanguageAgentRuntime` named
   `grok-build`.
 - `.github/workflows/` — `test.yaml`, `build-image.yaml`, `release-chart.yaml`.
@@ -46,12 +64,16 @@ it.
   mode. The suite is **extracted from the image under test**, so the checks always match
   the runtime being checked; it runs the container the way the operator does (read-only
   root, uid 1000, all capabilities dropped). Needs Docker.
+- `make test-emitter` — `node --test` on `test/`: the emitter's output for hand-built
+  normalized configs. No Docker needed; the only check that runs everywhere.
 - `make lint-chart` — `helm lint chart` plus `helm template grok-build chart`.
-- There is **no linter and no unit-test suite**. CI correctness is exactly the two
-  `test.yaml` jobs: `image-test` and `chart-lint`.
-- Changes to the terminal, the emitter or the manifest are mostly **not** covered by
-  anything local — the conformance suite checks the runtime contract, not Grok Build's
-  behaviour. Say so plainly rather than implying a green build proves more than it does.
+- There is **no linter**. CI correctness is exactly the three `test.yaml` jobs:
+  `image-test`, `emitter-test` and `chart-lint`.
+- Whether grok actually *accepts* what the emitter writes is **not** covered by CI — the
+  conformance suite checks the runtime contract, not Grok Build's behaviour. Verify it
+  against the real binary: `npm install @xai-official/grok` into a scratch dir, point
+  `GROK_HOME` at emitted files, and use `grok inspect`, the TUI in tmux, and `grok -p`
+  against a stub OpenAI-compatible server. Say plainly which of these you ran.
 - The PR title must be a conventional commit (`feat:`, `fix:`, `chore:`, `docs:`).
 
 ## Build & dev deploy
