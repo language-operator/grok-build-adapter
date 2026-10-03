@@ -10,10 +10,9 @@ browser, so working with the agent feels like a real terminal session.
 
 This repository was created from the [`opencode-adapter`](https://github.com/language-operator/opencode-adapter) template.
 
-> **Status:** the rename from the template is done; translating the operator's config
-> (model gateway, MCP tools, instructions) into Grok Build's is
-> [#1](https://github.com/language-operator/grok-build-adapter/issues/1). Until it lands
-> the emitter writes nothing and `grok` starts unconfigured.
+> **Status:** pre-release. Gateway models, MCP tools, instructions and task mode are
+> wired and checked against the grok binary; in-cluster acceptance and the first release
+> are tracked in [#1](https://github.com/language-operator/grok-build-adapter/issues/1).
 
 ## Architecture
 
@@ -22,15 +21,26 @@ plus the Grok Build CLI (npm `@xai-official/grok`, which ships the native binary
 base owns the OS layer, the web terminal (xterm.js over a node-pty WebSocket bridge,
 with a cross-origin guard and a 25s keepalive), `tini`, and the ETL that turns the
 operator's `/etc/agent/config.yaml` into a normalized config. What lives here is the
-three files that describe Grok Build to it:
+files that describe Grok Build to it:
 
 - **`runtime.json`** — the manifest: where config goes (`GROK_HOME=$STATE_DIR/grok`),
-  the serving surface, and how tmux launches the TUI.
-- **`emit.mjs`** — the emitter: normalized config → Grok Build config under
-  `$GROK_HOME`. Currently a placeholder (see #1).
+  the serving surface, how tmux launches the TUI, and the task-mode command.
+- **`emit.mjs`** — the emitter: normalized config → Grok Build's config.
+  - `$GROK_HOME/config.toml`: every gateway model as an OpenAI-compatible BYOK model
+    (`base_url` + `env_key`), the primary as the default. With that, grok never shows
+    xAI's sign-in screen.
+  - `$HOME/.claude.json` `mcpServers`: the agent's MCP tools, which grok reads through
+    its Claude Code compatibility layer. Header references become `${NAME}`, which grok
+    expands from its environment, so tokens never reach the disk.
+  - `$GROK_HOME/rules/langop.md`: persona and instructions, loaded as a global rule.
 - **`launch-grok-build.sh`** — what tmux runs. The base has already set the working
   directory (the cloned repo when the agent sets `spec.repository`, else
-  `/workspace`), so it opens that project directly.
+  `/workspace`), so it opens that project directly, and passes `--continue` once the
+  directory has a conversation, so a slept-and-woken agent resumes instead of opening
+  blank.
+- **`launch-grok-build-task.sh`** — for `spec.execution.mode: task`: sends the agent's
+  instructions as one headless prompt (`grok -p … --always-approve`) and exits with
+  grok's code — 0 on success, 1 on a model or gateway error.
 
 One container, running the base entrypoint: resolve the environment, seed config,
 serve. Seeding runs in the agent container rather than an init container because
@@ -64,14 +74,16 @@ The runtime sets `auth.enabled: true`, so access is gated entirely by the cluste
 OIDC proxy: when the `LanguageCluster` has auth enabled the operator injects an
 oauth2-proxy sidecar in front of the terminal. There is no built-in password — if
 the cluster does not enable auth, the terminal is exposed unauthenticated on its
-ingress. Pointing Grok Build at the model gateway without an interactive xAI login is
-part of #1.
+ingress. Grok Build itself needs no xAI login: it reaches the cluster model gateway as a
+custom OpenAI-compatible endpoint, using the per-agent key in `MODEL_API_KEY` when the
+deployment supplies one and the gateway's shared placeholder otherwise.
 
 ## Development
 
 ```bash
 make build      # docker build -t ghcr.io/language-operator/grok-build-adapter:latest .
 make test       # build, then run the coding-runtime conformance suite
+make test-emitter  # unit-test emit.mjs (no Docker)
 make publish    # build and push the image to ghcr.io
 make dev        # build, import into k3s, and upgrade the runtime release (inner loop)
 
@@ -87,4 +99,4 @@ helm template grok-build chart
   it under the operator's posture (read-only root, uid 1000, all capabilities dropped),
   and lints/templates the chart on every PR. The suite is taken out of the image rather
   than fetched, so the checks always match the runtime being checked, and no failures are
-  tolerated.
+  tolerated. A third job unit-tests the emitter.

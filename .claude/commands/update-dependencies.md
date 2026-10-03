@@ -32,8 +32,9 @@ separate suite version to keep in step.
 dependencies such as `@xai-official/grok-linux-x64`, which move in lockstep with it).
 
 **3. GitHub Actions** — across `.github/workflows/{test,build-image,release-chart}.yaml`:
-`actions/checkout`, `docker/setup-buildx-action`, `docker/login-action`,
-`docker/metadata-action`, `docker/build-push-action`, `azure/setup-helm`.
+`actions/checkout`, `actions/setup-node`, `docker/setup-buildx-action`, `docker/login-action`,
+`docker/metadata-action`, `docker/build-push-action`, `azure/setup-helm`. Keep
+`actions/setup-node`'s `node-version` on the base image's Node major.
 
 **4. Adapter files** — `runtime.json` and `emit.mjs` are **owned by this repo**:
 `coding-runtime` has no `examples/` entry for Grok Build, so there is nothing to re-copy.
@@ -80,7 +81,6 @@ the "before" column of the audit trail.
 
 ```bash
 grep -nE 'ARG (BASE|GROK_VERSION)' Dockerfile
-grep -rn 'CODING_RUNTIME_VERSION' Makefile hack/conformance.sh .github/workflows/
 grep -rn 'uses: .*@' .github/workflows/
 ```
 
@@ -112,7 +112,7 @@ this environment; re-run with `npm_config_cache="$(mktemp -d)"` prefixed.
 GitHub Actions — latest release per action:
 
 ```bash
-for a in actions/checkout docker/setup-buildx-action docker/login-action \
+for a in actions/checkout actions/setup-node docker/setup-buildx-action docker/login-action \
          docker/metadata-action docker/build-push-action azure/setup-helm; do
   printf '%s: %s\n' "$a" "$(gh api "repos/$a/releases/latest" --jq .tag_name)"
 done
@@ -134,8 +134,8 @@ record why.
 
 **5. Apply the updates** for the requested scope.
 
-- **Base:** update `ARG BASE` with the new tag **and** its digest, then the three
-  `CODING_RUNTIME_VERSION` locations to the matching `vX.Y.Z`.
+- **Base:** update `ARG BASE` with the new tag **and** its digest. If the new base needs
+  it, raise `requires.codingRuntime` in `runtime.json` too.
 - **Adapter files:** nothing to re-copy (see group 4). Check the base's release notes for
   manifest or emitter-contract changes; if `runtime.json` should gain a field, that is a
   real decision — surface it in the PR rather than applying it silently.

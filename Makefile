@@ -10,7 +10,7 @@ RELEASE   ?= grok-build
 # Scratch path for the suite extracted from the image; not checked in.
 CONFORMANCE := .conformance.sh
 
-.PHONY: build publish test lint-chart dev uninstall help
+.PHONY: build publish test test-emitter lint-chart dev uninstall help
 
 build:
 	docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest .
@@ -29,6 +29,11 @@ test: build
 		/opt/coding-runtime/test/conformance.sh > $(CONFORMANCE)
 	chmod +x $(CONFORMANCE)
 	$(CONFORMANCE) $(IMAGE):$(TAG) adapter
+
+# The emitter is a pure function, so it is tested directly — no image, no Docker.
+# The emitter-test CI job runs exactly this.
+test-emitter:
+	node --test test/*.test.mjs
 
 # Both halves of the chart-lint CI job. claude-code-adapter's target lints only;
 # templating too is what the workflow actually does, so this matches CI instead.
@@ -66,6 +71,7 @@ help:
 	@echo "Targets:"
 	@echo "  build      - Build the adapter image ($(IMAGE):$(TAG) + :latest)"
 	@echo "  test       - Build, then run the coding-runtime conformance suite"
+	@echo "  test-emitter - Unit-test emit.mjs (node --test; no Docker)"
 	@echo "  lint-chart - helm lint + helm template the chart (the chart-lint CI job)"
 	@echo "  publish    - Build and push $(TAG) + latest to the registry"
 	@echo "  dev        - Build, import into k3s, and upgrade the runtime release (inner loop)"

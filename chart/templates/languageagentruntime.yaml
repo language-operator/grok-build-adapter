@@ -12,8 +12,9 @@ spec:
 
   # Authentication is handled entirely by the cluster OIDC proxy — this is the
   # sole auth gate. When the cluster enables auth, agents using this runtime sit
-  # behind the injected oauth2-proxy sidecar. Grok Build reaching the model gateway
-  # without an interactive login is issue #1.
+  # behind the injected oauth2-proxy sidecar. Grok Build reaches the model gateway
+  # as a custom OpenAI-compatible endpoint configured in $GROK_HOME/config.toml, so
+  # no interactive xAI login is needed.
   auth:
     enabled: {{ .Values.auth.enabled }}
 
